@@ -10,11 +10,18 @@ const jwt = require("jsonwebtoken");
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://client-line-gamma-71.vercel.app"
+  ],
+  credentials: true
+}));
+
 app.use(express.json());
 
 /* ================== ✅ MONGODB CONNECT ================== */
-mongoose.connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/zyro")
+mongoose.connect("mongodb://127.0.0.1:27017/zyro")
   .then(() => console.log("MongoDB Connected ✅"))
   .catch(err => console.log(err));
 
@@ -106,11 +113,13 @@ app.post("/login", async (req, res) => {
 /* ================== ✅ RAZORPAY ================== */
 const razorpay = new Razorpay({
   key_id: "rzp_test_SauXSAhwsQllEv",
-  key_secret: process.env.RAZORPAY_SECRET || "N688DkfL8jvqT4LMJThp0h78",
+  key_secret: "N688DkfL8jvqT4LMJThp0h78",
 });
 
 /* ================== ✅ CREATE ORDER ================== */
 app.post("/create-order", async (req, res) => {
+  console.log("🔥 CREATE ORDER HIT");
+
   try {
     const { amount } = req.body;
 
@@ -131,7 +140,7 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-/* ================== ✅ VERIFY PAYMENT ================== */
+/* ================== ✅ VERIFY PAYMENT + SAVE ================== */
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -145,7 +154,7 @@ app.post("/verify-payment", async (req, res) => {
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_SECRET || "N688DkfL8jvqT4LMJThp0h78")
+      .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
       .update(body)
       .digest("hex");
 
@@ -195,9 +204,7 @@ app.get("/my-orders/:userId", async (req, res) => {
   }
 });
 
-/* ================== ✅ START SERVER (FIXED FOR RENDER) ================== */
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} 🚀`);
+/* ================== ✅ START SERVER ================== */
+app.listen(5000, () => {
+  console.log("Server running on port 5000 🚀");
 });
