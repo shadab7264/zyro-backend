@@ -50,8 +50,18 @@ app.get("/", (req, res) => {
 
 /* ================== ✅ PRODUCTS ================== */
 const products = [
-  { id: 1, name: "Black Hoodie", price: 1999 },
-  { id: 2, name: "White T-Shirt", price: 999 }
+  {
+    id: 1,
+    name: "Black Hoodie",
+    price: 1999,
+    image: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b"
+  },
+  {
+    id: 2,
+    name: "White T-Shirt",
+    price: 999,
+    image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab"
+  }
 ];
 
 app.get("/products", (req, res) => {
