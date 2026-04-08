@@ -209,4 +209,9 @@ app.listen(5000, () => {
   .catch(err => console.log(err));
   app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
-});
+});const cors = require("cors");
+
+app.use(cors({
+  origin: ["http://localhost:5173", "https://client-line-gamma-71.vercel.app"],
+  credentials: true
+}));
