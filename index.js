@@ -10,14 +10,7 @@ const jwt = require("jsonwebtoken");
 
 const app = express();
 
-app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://client-line-gamma-71.vercel.app"
-  ],
-  credentials: true
-}));
-
+app.use(cors());
 app.use(express.json());
 
 /* ================== ✅ MONGODB CONNECT ================== */
@@ -50,18 +43,8 @@ app.get("/", (req, res) => {
 
 /* ================== ✅ PRODUCTS ================== */
 const products = [
-  {
-    id: 1,
-    name: "Black Hoodie",
-    price: 1999,
-    image: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b"
-  },
-  {
-    id: 2,
-    name: "White T-Shirt",
-    price: 999,
-    image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab"
-  }
+  { id: 1, name: "Black Hoodie", price: 1999 },
+  { id: 2, name: "White T-Shirt", price: 999 }
 ];
 
 app.get("/products", (req, res) => {
@@ -196,7 +179,11 @@ app.post("/verify-payment", async (req, res) => {
 app.get("/orders", async (req, res) => {
   try {
     const orders = await Order.find().sort({ _id: -1 });
+
+    console.log("ORDERS FETCHED:", orders.length);
+
     res.json(orders || []);
+
   } catch (err) {
     console.log("ORDERS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch orders" });
