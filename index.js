@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 /* ================== ✅ MONGODB CONNECT ================== */
-mongoose.connect("mongodb://127.0.0.1:27017/zyro")
+mongoose.connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/zyro")
   .then(() => console.log("MongoDB Connected ✅"))
   .catch(err => console.log(err));
 
@@ -67,7 +67,7 @@ app.post("/signup", async (req, res) => {
     res.json({ success: true, user });
 
   } catch (err) {
-    console.log("SIGNUP ERROR:", err); // ✅ DEBUG
+    console.log("SIGNUP ERROR:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -98,7 +98,7 @@ app.post("/login", async (req, res) => {
     res.json({ success: true, token, user });
 
   } catch (err) {
-    console.log("LOGIN ERROR:", err); // ✅ DEBUG
+    console.log("LOGIN ERROR:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -106,13 +106,11 @@ app.post("/login", async (req, res) => {
 /* ================== ✅ RAZORPAY ================== */
 const razorpay = new Razorpay({
   key_id: "rzp_test_SauXSAhwsQllEv",
-  key_secret: "N688DkfL8jvqT4LMJThp0h78",
+  key_secret: process.env.RAZORPAY_SECRET || "N688DkfL8jvqT4LMJThp0h78",
 });
 
 /* ================== ✅ CREATE ORDER ================== */
 app.post("/create-order", async (req, res) => {
-  console.log("🔥 CREATE ORDER HIT");
-
   try {
     const { amount } = req.body;
 
@@ -128,12 +126,12 @@ app.post("/create-order", async (req, res) => {
     res.json(order);
 
   } catch (err) {
-    console.log("CREATE ORDER ERROR:", err); // ✅ DEBUG
+    console.log("CREATE ORDER ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-/* ================== ✅ VERIFY PAYMENT + SAVE ================== */
+/* ================== ✅ VERIFY PAYMENT ================== */
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -147,7 +145,7 @@ app.post("/verify-payment", async (req, res) => {
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
     const expectedSignature = crypto
-      .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
+      .createHmac("sha256", process.env.RAZORPAY_SECRET || "N688DkfL8jvqT4LMJThp0h78")
       .update(body)
       .digest("hex");
 
@@ -156,7 +154,7 @@ app.post("/verify-payment", async (req, res) => {
       await Order.create({
         orderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
-        amount: amount || 0, // ✅ SAFE FIX
+        amount: amount || 0,
         status: "paid",
         userId: userId || null,
       });
@@ -170,22 +168,18 @@ app.post("/verify-payment", async (req, res) => {
     }
 
   } catch (err) {
-    console.log("VERIFY ERROR:", err); // ✅ DEBUG
+    console.log("VERIFY ERROR:", err);
     res.status(500).json({ success: false });
   }
 });
 
-/* ================== ✅ GET ALL ORDERS (FIXED) ================== */
+/* ================== ✅ GET ALL ORDERS ================== */
 app.get("/orders", async (req, res) => {
   try {
     const orders = await Order.find().sort({ _id: -1 });
-
-    console.log("ORDERS FETCHED:", orders.length); // ✅ DEBUG
-
-    res.json(orders || []); // ✅ SAFE FIX
-
+    res.json(orders || []);
   } catch (err) {
-    console.log("ORDERS ERROR:", err); // ✅ VERY IMPORTANT
+    console.log("ORDERS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch orders" });
   }
 });
@@ -196,22 +190,14 @@ app.get("/my-orders/:userId", async (req, res) => {
     const orders = await Order.find({ userId: req.params.userId });
     res.json(orders || []);
   } catch (err) {
-    console.log("MY ORDERS ERROR:", err); // ✅ DEBUG
+    console.log("MY ORDERS ERROR:", err);
     res.status(500).json({ error: "Failed" });
   }
 });
 
-/* ================== ✅ START SERVER ================== */
-app.listen(5000, () => {
-  console.log("Server running on port 5000 🚀");
-});mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected ✅"))
-  .catch(err => console.log(err));
-  app.get("/", (req, res) => {
-  res.send("Backend is running 🚀");
-});const cors = require("cors");
+/* ================== ✅ START SERVER (FIXED FOR RENDER) ================== */
+const PORT = process.env.PORT || 5000;
 
-app.use(cors({
-  origin: ["http://localhost:5173", "https://client-line-gamma-71.vercel.app"],
-  credentials: true
-}));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} 🚀`);
+});
