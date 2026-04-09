@@ -36,12 +36,12 @@ const orderSchema = new mongoose.Schema({
 
 const Order = mongoose.model("Order", orderSchema);
 
-/* ================== ✅ PRODUCT SCHEMA (ADDED) ================== */
+/* ================== ✅ PRODUCT SCHEMA (UPDATED) ================== */
 const productSchema = new mongoose.Schema({
   name: String,
   price: Number,
   image: String,
-  size: [String],
+  stock: Number // 🔥 NEW (inventory)
 });
 
 const Product = mongoose.model("Product", productSchema);
@@ -57,22 +57,23 @@ const products = [
     id: 1,
     name: "Black Hoodie",
     price: 1999,
-    image: "https://images.unsplash.com/photo-1556821840-3a63f95609a7"
+    image: "https://images.unsplash.com/photo-1556821840-3a63f95609a7",
+    stock: 10
   },
   {
     id: 2,
     name: "White T-Shirt",
     price: 999,
-    image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab"
+    image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab",
+    stock: 5
   }
 ];
 
-/* ================== ✅ GET PRODUCTS FROM DB (UPDATED) ================== */
+/* ================== ✅ GET PRODUCTS ================== */
 app.get("/products", async (req, res) => {
   try {
     const data = await Product.find().sort({ _id: -1 });
 
-    // fallback if empty
     if (data.length === 0) {
       return res.json(products);
     }
@@ -86,13 +87,13 @@ app.get("/products", async (req, res) => {
 /* ================== ✅ ADD PRODUCT ================== */
 app.post("/add-product", async (req, res) => {
   try {
-    const { name, price, image, size } = req.body;
+    const { name, price, image, stock } = req.body;
 
     const newProduct = await Product.create({
       name,
       price,
       image,
-      size,
+      stock
     });
 
     res.json({ success: true, product: newProduct });
@@ -106,9 +107,11 @@ app.post("/add-product", async (req, res) => {
 /* ================== ✅ UPDATE PRODUCT ================== */
 app.put("/update-product/:id", async (req, res) => {
   try {
+    const { name, price, image, stock } = req.body;
+
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { name, price, image, stock },
       { new: true }
     );
 
