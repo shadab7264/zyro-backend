@@ -36,12 +36,22 @@ const orderSchema = new mongoose.Schema({
 
 const Order = mongoose.model("Order", orderSchema);
 
+/* ================== ✅ PRODUCT SCHEMA (ADDED) ================== */
+const productSchema = new mongoose.Schema({
+  name: String,
+  price: Number,
+  image: String,
+  size: [String],
+});
+
+const Product = mongoose.model("Product", productSchema);
+
 /* ================== ✅ TEST ROUTE ================== */
 app.get("/", (req, res) => {
   res.send("Backend Running 🚀");
 });
 
-/* ================== ✅ PRODUCTS (FIXED IMAGE) ================== */
+/* ================== ✅ PRODUCTS (OLD STATIC - KEPT) ================== */
 const products = [
   {
     id: 1,
@@ -57,8 +67,67 @@ const products = [
   }
 ];
 
-app.get("/products", (req, res) => {
-  res.json(products);
+/* ================== ✅ GET PRODUCTS FROM DB (UPDATED) ================== */
+app.get("/products", async (req, res) => {
+  try {
+    const data = await Product.find().sort({ _id: -1 });
+
+    // fallback if empty
+    if (data.length === 0) {
+      return res.json(products);
+    }
+
+    res.json(data);
+  } catch {
+    res.json(products);
+  }
+});
+
+/* ================== ✅ ADD PRODUCT ================== */
+app.post("/add-product", async (req, res) => {
+  try {
+    const { name, price, image, size } = req.body;
+
+    const newProduct = await Product.create({
+      name,
+      price,
+      image,
+      size,
+    });
+
+    res.json({ success: true, product: newProduct });
+
+  } catch (err) {
+    console.log("ADD PRODUCT ERROR:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
+/* ================== ✅ UPDATE PRODUCT ================== */
+app.put("/update-product/:id", async (req, res) => {
+  try {
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+
+    res.json({ success: true, product: updated });
+
+  } catch (err) {
+    console.log("UPDATE ERROR:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
+/* ================== ✅ DELETE PRODUCT ================== */
+app.delete("/delete-product/:id", async (req, res) => {
+  try {
+    await Product.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch {
+    res.json({ success: false });
+  }
 });
 
 /* ================== ✅ SIGNUP ================== */
@@ -141,7 +210,7 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-/* ================== ✅ VERIFY PAYMENT (FIXED) ================== */
+/* ================== ✅ VERIFY PAYMENT ================== */
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -157,9 +226,6 @@ app.post("/verify-payment", async (req, res) => {
       .update(body)
       .digest("hex");
 
-    console.log("EXPECTED:", expectedSignature);
-    console.log("RECEIVED:", razorpay_signature);
-
     if (expectedSignature === razorpay_signature) {
       return res.json({ success: true });
     } else {
@@ -169,16 +235,6 @@ app.post("/verify-payment", async (req, res) => {
   } catch (err) {
     console.log("VERIFY ERROR:", err);
     res.status(500).json({ success: false });
-  }
-});
-
-/* ================== ✅ DELETE PRODUCT (NEW FEATURE) ================== */
-app.delete("/delete-product/:id", async (req, res) => {
-  try {
-    // currently products are static, so just return success
-    res.json({ success: true });
-  } catch {
-    res.json({ success: false });
   }
 });
 
@@ -207,69 +263,4 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} 🚀`);
-});/* ================== ✅ PRODUCT SCHEMA ================== */
-const productSchema = new mongoose.Schema({
-  name: String,
-  price: Number,
-  image: String,
-  size: [String],
-});
-
-const Product = mongoose.model("Product", productSchema);
-
-/* ================== ✅ GET PRODUCTS FROM DB ================== */
-app.get("/products", async (req, res) => {
-  try {
-    const products = await Product.find().sort({ _id: -1 });
-    res.json(products);
-  } catch {
-    res.json([]);
-  }
-});
-
-/* ================== ✅ ADD PRODUCT ================== */
-app.post("/add-product", async (req, res) => {
-  try {
-    const { name, price, image, size } = req.body;
-
-    const product = await Product.create({
-      name,
-      price,
-      image,
-      size,
-    });
-
-    res.json({ success: true, product });
-
-  } catch (err) {
-    console.log("ADD PRODUCT ERROR:", err);
-    res.status(500).json({ success: false });
-  }
-});
-
-/* ================== ✅ DELETE PRODUCT ================== */
-app.delete("/delete-product/:id", async (req, res) => {
-  try {
-    await Product.findByIdAndDelete(req.params.id);
-    res.json({ success: true });
-  } catch {
-    res.json({ success: false });
-  }
-});/* ================== ✅ UPDATE PRODUCT ================== */
-app.put("/update-product/:id", async (req, res) => {
-  try {
-    const { name, price, image, size } = req.body;
-
-    const updated = await Product.findByIdAndUpdate(
-      req.params.id,
-      { name, price, image, size },
-      { new: true }
-    );
-
-    res.json({ success: true, product: updated });
-
-  } catch (err) {
-    console.log("UPDATE ERROR:", err);
-    res.status(500).json({ success: false });
-  }
 });
