@@ -13,16 +13,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* ================== ✅ MONGODB CONNECT (FIXED) ================== */
-mongoose.connect(
-  process.env.MONGO_URI || "mongodb://127.0.0.1:27017/zyro",
-  {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  }
-)
-.then(() => console.log("MongoDB Connected ✅"))
-.catch(err => console.log("MongoDB ERROR ❌:", err));
+/* ================== ✅ MONGODB CONNECT ================== */
+// 🔥 FIX: Support Atlas + Local both
+mongoose.connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/zyro")
+  .then(() => console.log("MongoDB Connected ✅"))
+  .catch(err => console.log(err));
 
 /* ================== ✅ USER SCHEMA ================== */
 const User = mongoose.model("User", {
@@ -48,9 +43,20 @@ app.get("/", (req, res) => {
 });
 
 /* ================== ✅ PRODUCTS ================== */
+// 🔥 FIX: added image field (NO OTHER CHANGE)
 const products = [
-  { id: 1, name: "Black Hoodie", price: 1999 },
-  { id: 2, name: "White T-Shirt", price: 999 }
+  {
+    id: 1,
+    name: "Black Hoodie",
+    price: 1999,
+    image: "https://images.unsplash.com/photo-1556821840-3a63f95609a7"
+  },
+  {
+    id: 2,
+    name: "White T-Shirt",
+    price: 999,
+    image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab"
+  }
 ];
 
 app.get("/products", (req, res) => {
@@ -110,9 +116,10 @@ app.post("/login", async (req, res) => {
 });
 
 /* ================== ✅ RAZORPAY ================== */
+// 🔥 FIX: support env + fallback
 const razorpay = new Razorpay({
-  key_id: "rzp_test_SauXSAhwsQllEv",
-  key_secret: "N688DkfL8jvqT4LMJThp0h78",
+  key_id: process.env.RAZORPAY_KEY || "rzp_test_SauXSAhwsQllEv",
+  key_secret: process.env.RAZORPAY_SECRET || "N688DkfL8jvqT4LMJThp0h78",
 });
 
 /* ================== ✅ CREATE ORDER ================== */
@@ -152,37 +159,36 @@ app.post("/verify-payment", async (req, res) => {
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
+    // 🔥 FIX: removed crash issue + env support
     const expectedSignature = crypto
-      .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
+      .createHmac(
+        "sha256",
+        process.env.RAZORPAY_SECRET || "N688DkfL8jvqT4LMJThp0h78"
+      )
       .update(body.toString())
       .digest("hex");
 
     if (expectedSignature === razorpay_signature) {
 
-      // ✅ SAFE DB SAVE (won’t crash even if DB slow)
-      try {
-        await Order.create({
-          orderId: razorpay_order_id,
-          paymentId: razorpay_payment_id,
-          amount: amount || 0,
-          status: "paid",
-          userId: userId || null,
-        });
-        console.log("✅ ORDER SAVED");
-      } catch (dbErr) {
-        console.log("⚠️ DB SAVE FAILED:", dbErr);
-      }
+      await Order.create({
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        amount: amount || 0,
+        status: "paid",
+        userId: userId || null,
+      });
 
-      return res.json({ success: true });
+      console.log("✅ PAYMENT VERIFIED & SAVED");
+
+      res.json({ success: true });
 
     } else {
-      console.log("❌ SIGNATURE MISMATCH");
-      return res.status(400).json({ success: false });
+      res.status(400).json({ success: false });
     }
 
   } catch (err) {
-    console.log("❌ VERIFY ERROR:", err);
-    return res.status(500).json({ success: false });
+    console.log("VERIFY ERROR:", err);
+    res.status(500).json({ success: false });
   }
 });
 
@@ -190,7 +196,11 @@ app.post("/verify-payment", async (req, res) => {
 app.get("/orders", async (req, res) => {
   try {
     const orders = await Order.find().sort({ _id: -1 });
+
+    console.log("ORDERS FETCHED:", orders.length);
+
     res.json(orders || []);
+
   } catch (err) {
     console.log("ORDERS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch orders" });
@@ -209,6 +219,9 @@ app.get("/my-orders/:userId", async (req, res) => {
 });
 
 /* ================== ✅ START SERVER ================== */
-app.listen(5000, () => {
-  console.log("Server running on port 5000 🚀");
+// 🔥 FIX: render compatible
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} 🚀`);
 });
