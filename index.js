@@ -145,9 +145,12 @@ app.post("/verify-payment", async (req, res) => {
     } = req.body;
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
+    console.log("SECRET:", process.env.RAZORPAY_SECRET);
+    console.log("BODY:", body);
+    console.log("SIGNATURE:", razorpay_signature);
 
     const expectedSignature = crypto
-      .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
+      .createHmac("sha256", process.env.RAZORPAY_SECRET)
       .update(body.toString())
       .digest("hex");
 
