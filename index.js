@@ -147,33 +147,23 @@ app.post("/verify-payment", async (req, res) => {
     const {
       razorpay_order_id,
       razorpay_payment_id,
-      razorpay_signature,
-      amount,
-      userId
+      razorpay_signature
     } = req.body;
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
-    // 🔥 FIXED: hardcoded secret (no env issue)
     const expectedSignature = crypto
       .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
-      .update(body.toString())
+      .update(body)
       .digest("hex");
 
+    console.log("EXPECTED:", expectedSignature);
+    console.log("RECEIVED:", razorpay_signature);
+
     if (expectedSignature === razorpay_signature) {
-
-      await Order.create({
-        orderId: razorpay_order_id,
-        paymentId: razorpay_payment_id,
-        amount: amount || 0,
-        status: "paid",
-        userId: userId || null,
-      });
-
-      res.json({ success: true });
-
+      return res.json({ success: true });
     } else {
-      res.status(400).json({ success: false });
+      return res.json({ success: false });
     }
 
   } catch (err) {
