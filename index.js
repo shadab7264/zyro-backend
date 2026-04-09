@@ -14,7 +14,6 @@ app.use(cors());
 app.use(express.json());
 
 /* ================== ✅ MONGODB CONNECT ================== */
-// 🔥 FIX: Support Atlas + Local both
 mongoose.connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/zyro")
   .then(() => console.log("MongoDB Connected ✅"))
   .catch(err => console.log(err));
@@ -42,8 +41,7 @@ app.get("/", (req, res) => {
   res.send("Backend Running 🚀");
 });
 
-/* ================== ✅ PRODUCTS ================== */
-// 🔥 FIX: added image field (NO OTHER CHANGE)
+/* ================== ✅ PRODUCTS (FIXED IMAGE) ================== */
 const products = [
   {
     id: 1,
@@ -116,16 +114,13 @@ app.post("/login", async (req, res) => {
 });
 
 /* ================== ✅ RAZORPAY ================== */
-// 🔥 FIX: support env + fallback
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY || "rzp_test_SauXSAhwsQllEv",
-  key_secret: process.env.RAZORPAY_SECRET || "N688DkfL8jvqT4LMJThp0h78",
+  key_id: "rzp_test_SauXSAhwsQllEv",
+  key_secret: "N688DkfL8jvqT4LMJThp0h78",
 });
 
 /* ================== ✅ CREATE ORDER ================== */
 app.post("/create-order", async (req, res) => {
-  console.log("🔥 CREATE ORDER HIT");
-
   try {
     const { amount } = req.body;
 
@@ -146,7 +141,7 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-/* ================== ✅ VERIFY PAYMENT + SAVE ================== */
+/* ================== ✅ VERIFY PAYMENT (FIXED) ================== */
 app.post("/verify-payment", async (req, res) => {
   try {
     const {
@@ -159,12 +154,9 @@ app.post("/verify-payment", async (req, res) => {
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
-    // 🔥 FIX: removed crash issue + env support
+    // 🔥 FIXED: hardcoded secret (no env issue)
     const expectedSignature = crypto
-      .createHmac(
-        "sha256",
-        process.env.RAZORPAY_SECRET || "N688DkfL8jvqT4LMJThp0h78"
-      )
+      .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
       .update(body.toString())
       .digest("hex");
 
@@ -177,8 +169,6 @@ app.post("/verify-payment", async (req, res) => {
         status: "paid",
         userId: userId || null,
       });
-
-      console.log("✅ PAYMENT VERIFIED & SAVED");
 
       res.json({ success: true });
 
@@ -196,13 +186,8 @@ app.post("/verify-payment", async (req, res) => {
 app.get("/orders", async (req, res) => {
   try {
     const orders = await Order.find().sort({ _id: -1 });
-
-    console.log("ORDERS FETCHED:", orders.length);
-
     res.json(orders || []);
-
   } catch (err) {
-    console.log("ORDERS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch orders" });
   }
 });
@@ -213,13 +198,11 @@ app.get("/my-orders/:userId", async (req, res) => {
     const orders = await Order.find({ userId: req.params.userId });
     res.json(orders || []);
   } catch (err) {
-    console.log("MY ORDERS ERROR:", err);
     res.status(500).json({ error: "Failed" });
   }
 });
 
 /* ================== ✅ START SERVER ================== */
-// 🔥 FIX: render compatible
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
