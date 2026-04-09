@@ -13,10 +13,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* ================== ✅ MONGODB CONNECT ================== */
-mongoose.connect("mongodb://127.0.0.1:27017/zyro")
-  .then(() => console.log("MongoDB Connected ✅"))
-  .catch(err => console.log(err));
+/* ================== ✅ MONGODB CONNECT (FIXED) ================== */
+mongoose.connect(
+  process.env.MONGO_URI || "mongodb://127.0.0.1:27017/zyro",
+  {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  }
+)
+.then(() => console.log("MongoDB Connected ✅"))
+.catch(err => console.log("MongoDB ERROR ❌:", err));
 
 /* ================== ✅ USER SCHEMA ================== */
 const User = mongoose.model("User", {
@@ -146,10 +152,6 @@ app.post("/verify-payment", async (req, res) => {
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
-    console.log("BODY:", body);
-    console.log("SIGNATURE:", razorpay_signature);
-
-    // ✅ FIXED (NO ENV ISSUE)
     const expectedSignature = crypto
       .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
       .update(body.toString())
@@ -157,15 +159,19 @@ app.post("/verify-payment", async (req, res) => {
 
     if (expectedSignature === razorpay_signature) {
 
-      await Order.create({
-        orderId: razorpay_order_id,
-        paymentId: razorpay_payment_id,
-        amount: amount || 0,
-        status: "paid",
-        userId: userId || null,
-      });
-
-      console.log("✅ PAYMENT VERIFIED & SAVED");
+      // ✅ SAFE DB SAVE (won’t crash even if DB slow)
+      try {
+        await Order.create({
+          orderId: razorpay_order_id,
+          paymentId: razorpay_payment_id,
+          amount: amount || 0,
+          status: "paid",
+          userId: userId || null,
+        });
+        console.log("✅ ORDER SAVED");
+      } catch (dbErr) {
+        console.log("⚠️ DB SAVE FAILED:", dbErr);
+      }
 
       return res.json({ success: true });
 
@@ -184,11 +190,7 @@ app.post("/verify-payment", async (req, res) => {
 app.get("/orders", async (req, res) => {
   try {
     const orders = await Order.find().sort({ _id: -1 });
-
-    console.log("ORDERS FETCHED:", orders.length);
-
     res.json(orders || []);
-
   } catch (err) {
     console.log("ORDERS ERROR:", err);
     res.status(500).json({ error: "Failed to fetch orders" });
