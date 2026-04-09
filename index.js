@@ -255,4 +255,21 @@ app.delete("/delete-product/:id", async (req, res) => {
   } catch {
     res.json({ success: false });
   }
+});/* ================== ✅ UPDATE PRODUCT ================== */
+app.put("/update-product/:id", async (req, res) => {
+  try {
+    const { name, price, image, size } = req.body;
+
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      { name, price, image, size },
+      { new: true }
+    );
+
+    res.json({ success: true, product: updated });
+
+  } catch (err) {
+    console.log("UPDATE ERROR:", err);
+    res.status(500).json({ success: false });
+  }
 });
