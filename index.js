@@ -145,12 +145,13 @@ app.post("/verify-payment", async (req, res) => {
     } = req.body;
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
-    console.log("SECRET:", process.env.RAZORPAY_SECRET);
+
     console.log("BODY:", body);
     console.log("SIGNATURE:", razorpay_signature);
 
+    // ✅ FIXED: using correct secret (not env)
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_SECRET)
+      .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
       .update(body.toString())
       .digest("hex");
 
@@ -169,6 +170,7 @@ app.post("/verify-payment", async (req, res) => {
       res.json({ success: true });
 
     } else {
+      console.log("❌ SIGNATURE MISMATCH");
       res.status(400).json({ success: false });
     }
 
