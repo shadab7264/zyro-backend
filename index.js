@@ -207,4 +207,52 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} 🚀`);
+});/* ================== ✅ PRODUCT SCHEMA ================== */
+const productSchema = new mongoose.Schema({
+  name: String,
+  price: Number,
+  image: String,
+  size: [String],
+});
+
+const Product = mongoose.model("Product", productSchema);
+
+/* ================== ✅ GET PRODUCTS FROM DB ================== */
+app.get("/products", async (req, res) => {
+  try {
+    const products = await Product.find().sort({ _id: -1 });
+    res.json(products);
+  } catch {
+    res.json([]);
+  }
+});
+
+/* ================== ✅ ADD PRODUCT ================== */
+app.post("/add-product", async (req, res) => {
+  try {
+    const { name, price, image, size } = req.body;
+
+    const product = await Product.create({
+      name,
+      price,
+      image,
+      size,
+    });
+
+    res.json({ success: true, product });
+
+  } catch (err) {
+    console.log("ADD PRODUCT ERROR:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
+/* ================== ✅ DELETE PRODUCT ================== */
+app.delete("/delete-product/:id", async (req, res) => {
+  try {
+    await Product.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch {
+    res.json({ success: false });
+  }
 });
