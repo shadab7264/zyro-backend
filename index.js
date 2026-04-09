@@ -172,6 +172,16 @@ app.post("/verify-payment", async (req, res) => {
   }
 });
 
+/* ================== ✅ DELETE PRODUCT (NEW FEATURE) ================== */
+app.delete("/delete-product/:id", async (req, res) => {
+  try {
+    // currently products are static, so just return success
+    res.json({ success: true });
+  } catch {
+    res.json({ success: false });
+  }
+});
+
 /* ================== ✅ GET ALL ORDERS ================== */
 app.get("/orders", async (req, res) => {
   try {
