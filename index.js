@@ -11,7 +11,7 @@ const jwt = require("jsonwebtoken");
 // ✅ CLOUDINARY (FIXED)
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const CloudinaryStorage = require("multer-storage-cloudinary").CloudinaryStorage;
 
 const app = express();
 
@@ -81,7 +81,7 @@ app.post("/upload", upload.single("image"), (req, res) => {
   try {
     res.json({
       success: true,
-      imageUrl: req.file.path // 🔥 CLOUDINARY URL
+      imageUrl: req.file.path
     });
   } catch (err) {
     console.log("UPLOAD ERROR:", err);
@@ -99,7 +99,7 @@ app.get("/products", async (req, res) => {
   }
 });
 
-/* ================== ✅ ADD PRODUCT (UPDATED) ================== */
+/* ================== ✅ ADD PRODUCT (FORMDATA SUPPORT) ================== */
 app.post("/add-product", upload.single("image"), async (req, res) => {
   try {
     const { name, price, stock, category, subcategory } = req.body;
@@ -177,7 +177,7 @@ app.get("/admin-stats", async (req, res) => {
       totalRevenue
     });
 
-  } catch (err) {
+  } catch {
     res.json({
       totalOrders: 0,
       totalProducts: 0,
@@ -202,7 +202,6 @@ app.post("/signup", async (req, res) => {
     res.json({ success: true, user });
 
   } catch (err) {
-    console.log("SIGNUP ERROR:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -214,15 +213,11 @@ app.post("/login", async (req, res) => {
 
     const user = await User.findOne({ email });
 
-    if (!user) {
-      return res.json({ success: false });
-    }
+    if (!user) return res.json({ success: false });
 
     const isMatch = await bcrypt.compare(password, user.password);
 
-    if (!isMatch) {
-      return res.json({ success: false });
-    }
+    if (!isMatch) return res.json({ success: false });
 
     const token = jwt.sign(
       { id: user._id },
@@ -232,7 +227,7 @@ app.post("/login", async (req, res) => {
 
     res.json({ success: true, token, user });
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ success: false });
   }
 });
@@ -255,7 +250,7 @@ app.post("/create-order", async (req, res) => {
 
     res.json(order);
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -276,11 +271,7 @@ app.post("/verify-payment", async (req, res) => {
       .update(body)
       .digest("hex");
 
-    if (expectedSignature === razorpay_signature) {
-      return res.json({ success: true });
-    } else {
-      return res.json({ success: false });
-    }
+    res.json({ success: expectedSignature === razorpay_signature });
 
   } catch {
     res.status(500).json({ success: false });
