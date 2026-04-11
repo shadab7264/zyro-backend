@@ -8,34 +8,29 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// ✅ UPLOAD
+// ✅ CLOUDINARY
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
+const cloudinary = require("cloudinary").v2;
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-/* ================== ✅ CREATE UPLOAD FOLDER ================== */
-const uploadPath = path.join(__dirname, "uploads");
+/* ================== ✅ CLOUDINARY CONFIG ================== */
+cloudinary.config({
+  cloud_name: "dom7vhjen",
+  api_key: "727246957856766",
+  api_secret: "GG8SWwESk2FLy5y8uzh-4M53vOY"
+});
 
-if (!fs.existsSync(uploadPath)) {
-  fs.mkdirSync(uploadPath);
-}
-
-/* ================== ✅ STATIC FILE SERVE ================== */
-app.use("/uploads", express.static(uploadPath));
-
-/* ================== ✅ MULTER CONFIG (FIXED) ================== */
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadPath); // ✅ FIXED PATH
-  },
-  filename: function (req, file, cb) {
-    const uniqueName = Date.now() + "-" + file.originalname;
-    cb(null, uniqueName);
+/* ================== ✅ MULTER CLOUD STORAGE ================== */
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "products",
+    allowed_formats: ["jpg", "png", "jpeg"]
   }
 });
 
@@ -68,7 +63,9 @@ const productSchema = new mongoose.Schema({
   name: String,
   price: Number,
   image: String,
-  stock: Number
+  stock: Number,
+  category: String,
+  subcategory: String
 });
 const Product = mongoose.model("Product", productSchema);
 
@@ -77,16 +74,13 @@ app.get("/", (req, res) => {
   res.send("Backend Running 🚀");
 });
 
-/* ================== ✅ IMAGE UPLOAD (FIXED) ================== */
+/* ================== ✅ IMAGE UPLOAD (CLOUDINARY) ================== */
 app.post("/upload", upload.single("image"), (req, res) => {
   try {
-    const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-
     res.json({
       success: true,
-      image: imageUrl // ✅ FIXED KEY
+      image: req.file.path // 🔥 CLOUDINARY URL
     });
-
   } catch (err) {
     console.log("UPLOAD ERROR:", err);
     res.status(500).json({ success: false });
@@ -96,7 +90,14 @@ app.post("/upload", upload.single("image"), (req, res) => {
 /* ================== ✅ PRODUCTS ================== */
 app.get("/products", async (req, res) => {
   try {
-    const data = await Product.find().sort({ _id: -1 });
+    const { category, subcategory } = req.query;
+
+    let filter = {};
+    if (category) filter.category = category;
+    if (subcategory) filter.subcategory = subcategory;
+
+    const data = await Product.find(filter).sort({ _id: -1 });
+
     res.json(data);
   } catch {
     res.json([]);
@@ -106,13 +107,15 @@ app.get("/products", async (req, res) => {
 /* ================== ✅ ADD PRODUCT ================== */
 app.post("/add-product", async (req, res) => {
   try {
-    const { name, price, image, stock } = req.body;
+    const { name, price, image, stock, category, subcategory } = req.body;
 
     const newProduct = await Product.create({
       name,
       price,
       image,
-      stock
+      stock,
+      category,
+      subcategory
     });
 
     res.json({ success: true, product: newProduct });
@@ -126,11 +129,9 @@ app.post("/add-product", async (req, res) => {
 /* ================== ✅ UPDATE PRODUCT ================== */
 app.put("/update-product/:id", async (req, res) => {
   try {
-    const { name, price, image, stock } = req.body;
-
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      { name, price, image, stock },
+      req.body,
       { new: true }
     );
 
@@ -149,6 +150,28 @@ app.delete("/delete-product/:id", async (req, res) => {
     res.json({ success: true });
   } catch {
     res.json({ success: false });
+  }
+});
+
+/* ================== ✅ ADMIN STATS ================== */
+app.get("/admin-stats", async (req, res) => {
+  try {
+    const totalOrders = await Order.countDocuments();
+
+    const revenue = await Order.aggregate([
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+
+    const totalProducts = await Product.countDocuments();
+
+    res.json({
+      totalOrders,
+      totalRevenue: revenue[0]?.total || 0,
+      totalProducts
+    });
+
+  } catch {
+    res.json({ totalOrders: 0, totalRevenue: 0, totalProducts: 0 });
   }
 });
 
@@ -215,10 +238,6 @@ app.post("/create-order", async (req, res) => {
   try {
     const { amount } = req.body;
 
-    if (!amount) {
-      return res.status(400).json({ error: "Amount required" });
-    }
-
     const order = await razorpay.orders.create({
       amount: amount * 100,
       currency: "INR",
@@ -227,7 +246,6 @@ app.post("/create-order", async (req, res) => {
     res.json(order);
 
   } catch (err) {
-    console.log("CREATE ORDER ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -248,14 +266,9 @@ app.post("/verify-payment", async (req, res) => {
       .update(body)
       .digest("hex");
 
-    if (expectedSignature === razorpay_signature) {
-      return res.json({ success: true });
-    } else {
-      return res.json({ success: false });
-    }
+    res.json({ success: expectedSignature === razorpay_signature });
 
-  } catch (err) {
-    console.log("VERIFY ERROR:", err);
+  } catch {
     res.status(500).json({ success: false });
   }
 });
