@@ -4,14 +4,12 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 
-// ✅ AUTH
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// ✅ CLOUDINARY (FIXED)
-const multer = require("multer");
+// 🔥 CLOUDINARY
 const cloudinary = require("cloudinary").v2;
-const CloudinaryStorage = require("multer-storage-cloudinary").CloudinaryStorage;
+const multer = require("multer");
 
 const app = express();
 
@@ -22,18 +20,11 @@ app.use(express.json());
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
   api_key: process.env.CLOUD_API_KEY,
-  api_secret: process.env.CLOUD_API_SECRET
+  api_secret: process.env.CLOUD_API_SECRET,
 });
 
-/* ================== ✅ MULTER STORAGE ================== */
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: "arvelo_products",
-    allowed_formats: ["jpg", "png", "jpeg"],
-  },
-});
-
+/* ================== ✅ MULTER (MEMORY) ================== */
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 /* ================== ✅ MONGODB ================== */
@@ -41,15 +32,14 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected ✅"))
   .catch(err => console.log(err));
 
-/* ================== ✅ USER ================== */
+/* ================== ✅ MODELS ================== */
 const User = mongoose.model("User", {
   name: String,
   email: String,
   password: String,
 });
 
-/* ================== ✅ ORDER ================== */
-const orderSchema = new mongoose.Schema({
+const Order = mongoose.model("Order", {
   orderId: String,
   paymentId: String,
   amount: Number,
@@ -57,63 +47,77 @@ const orderSchema = new mongoose.Schema({
   userId: String,
 });
 
-const Order = mongoose.model("Order", orderSchema);
-
-/* ================== ✅ PRODUCT ================== */
-const productSchema = new mongoose.Schema({
+const Product = mongoose.model("Product", {
   name: String,
   price: Number,
   image: String,
   stock: Number,
   category: String,
-  subcategory: String
+  subcategory: String,
 });
-
-const Product = mongoose.model("Product", productSchema);
 
 /* ================== ✅ TEST ================== */
 app.get("/", (req, res) => {
   res.send("Backend Running 🚀");
 });
 
-/* ================== ✅ UPLOAD IMAGE ================== */
-app.post("/upload", upload.single("image"), (req, res) => {
+/* ================== ✅ IMAGE UPLOAD ================== */
+app.post("/upload", upload.single("image"), async (req, res) => {
   try {
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: "arvelo" },
+        (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        }
+      );
+      stream.end(req.file.buffer);
+    });
+
     res.json({
       success: true,
-      imageUrl: req.file.path
+      imageUrl: result.secure_url,
     });
+
   } catch (err) {
     console.log("UPLOAD ERROR:", err);
     res.status(500).json({ success: false });
   }
 });
 
-/* ================== ✅ GET PRODUCTS ================== */
-app.get("/products", async (req, res) => {
-  try {
-    const data = await Product.find().sort({ _id: -1 });
-    res.json(data || []);
-  } catch {
-    res.json([]);
-  }
-});
-
-/* ================== ✅ ADD PRODUCT (FORMDATA SUPPORT) ================== */
+/* ================== ✅ ADD PRODUCT ================== */
 app.post("/add-product", upload.single("image"), async (req, res) => {
   try {
+    let imageUrl = "";
+
+    if (req.file) {
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "arvelo" },
+          (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+
+      imageUrl = result.secure_url;
+    }
+
     const { name, price, stock, category, subcategory } = req.body;
 
-    const newProduct = await Product.create({
+    const product = await Product.create({
       name,
       price,
       stock,
       category,
       subcategory,
-      image: req.file ? req.file.path : ""
+      image: imageUrl,
     });
 
-    res.json({ success: true, product: newProduct });
+    res.json({ success: true, product });
 
   } catch (err) {
     console.log("ADD PRODUCT ERROR:", err);
@@ -124,23 +128,28 @@ app.post("/add-product", upload.single("image"), async (req, res) => {
 /* ================== ✅ UPDATE PRODUCT ================== */
 app.put("/update-product/:id", upload.single("image"), async (req, res) => {
   try {
-    const { name, price, stock, category, subcategory } = req.body;
-
-    const updateData = {
-      name,
-      price,
-      stock,
-      category,
-      subcategory
-    };
+    let imageUrl = req.body.image;
 
     if (req.file) {
-      updateData.image = req.file.path;
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "arvelo" },
+          (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+
+      imageUrl = result.secure_url;
     }
+
+    const { name, price, stock, category, subcategory } = req.body;
 
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      updateData,
+      { name, price, stock, category, subcategory, image: imageUrl },
       { new: true }
     );
 
@@ -162,27 +171,29 @@ app.delete("/delete-product/:id", async (req, res) => {
   }
 });
 
+/* ================== ✅ GET PRODUCTS ================== */
+app.get("/products", async (req, res) => {
+  try {
+    const data = await Product.find().sort({ _id: -1 });
+    res.json(data);
+  } catch {
+    res.json([]);
+  }
+});
+
 /* ================== ✅ ADMIN STATS ================== */
 app.get("/admin-stats", async (req, res) => {
   try {
-    const totalOrders = await Order.countDocuments();
+    const orders = await Order.find();
+
+    const totalOrders = orders.length;
+    const totalRevenue = orders.reduce((sum, o) => sum + o.amount, 0);
     const totalProducts = await Product.countDocuments();
 
-    const orders = await Order.find();
-    const totalRevenue = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
-
-    res.json({
-      totalOrders,
-      totalProducts,
-      totalRevenue
-    });
+    res.json({ totalOrders, totalRevenue, totalProducts });
 
   } catch {
-    res.json({
-      totalOrders: 0,
-      totalProducts: 0,
-      totalRevenue: 0
-    });
+    res.json({ totalOrders: 0, totalRevenue: 0, totalProducts: 0 });
   }
 });
 
@@ -213,15 +224,19 @@ app.post("/login", async (req, res) => {
 
     const user = await User.findOne({ email });
 
-    if (!user) return res.json({ success: false });
+    if (!user) {
+      return res.json({ success: false });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
-    if (!isMatch) return res.json({ success: false });
+    if (!isMatch) {
+      return res.json({ success: false });
+    }
 
     const token = jwt.sign(
       { id: user._id },
-      "secret123",
+      process.env.JWT_SECRET || "secret123",
       { expiresIn: "1d" }
     );
 
@@ -234,8 +249,8 @@ app.post("/login", async (req, res) => {
 
 /* ================== ✅ RAZORPAY ================== */
 const razorpay = new Razorpay({
-  key_id: "rzp_test_SauXSAhwsQllEv",
-  key_secret: "N688DkfL8jvqT4LMJThp0h78",
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_SECRET,
 });
 
 /* ================== ✅ CREATE ORDER ================== */
@@ -256,31 +271,26 @@ app.post("/create-order", async (req, res) => {
 });
 
 /* ================== ✅ VERIFY PAYMENT ================== */
-app.post("/verify-payment", async (req, res) => {
-  try {
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature
-    } = req.body;
+app.post("/verify-payment", (req, res) => {
+  const {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature
+  } = req.body;
 
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
+  const body = razorpay_order_id + "|" + razorpay_payment_id;
 
-    const expectedSignature = crypto
-      .createHmac("sha256", "N688DkfL8jvqT4LMJThp0h78")
-      .update(body)
-      .digest("hex");
+  const expected = crypto
+    .createHmac("sha256", process.env.RAZORPAY_SECRET)
+    .update(body)
+    .digest("hex");
 
-    res.json({ success: expectedSignature === razorpay_signature });
-
-  } catch {
-    res.status(500).json({ success: false });
-  }
+  res.json({ success: expected === razorpay_signature });
 });
 
-/* ================== ✅ START SERVER ================== */
+/* ================== 🚀 START ================== */
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} 🚀`);
+  console.log(`Server running on ${PORT} 🚀`);
 });
