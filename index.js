@@ -4,31 +4,42 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 
-// ✅ EXISTING
+// ✅ ADD THESE
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// ✅ NEW (IMAGE UPLOAD)
+// 🔥 NEW (UPLOAD)
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-/* ================== ✅ IMAGE UPLOAD SETUP ================== */
+/* ================== ✅ CREATE UPLOAD FOLDER ================== */
+const uploadPath = path.join(__dirname, "uploads");
+
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath);
+}
+
+/* ================== ✅ STATIC FILE SERVE ================== */
+app.use("/uploads", express.static(uploadPath));
+
+/* ================== ✅ MULTER CONFIG ================== */
 const storage = multer.diskStorage({
-  destination: "uploads/",
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    const uniqueName = Date.now() + "-" + file.originalname;
+    cb(null, uniqueName);
   }
 });
 
 const upload = multer({ storage });
-
-// serve images
-app.use("/uploads", express.static("uploads"));
 
 /* ================== ✅ MONGODB CONNECT ================== */
 mongoose.connect(process.env.MONGO_URI)
@@ -53,14 +64,12 @@ const orderSchema = new mongoose.Schema({
 
 const Order = mongoose.model("Order", orderSchema);
 
-/* ================== ✅ PRODUCT SCHEMA (UPGRADED) ================== */
+/* ================== ✅ PRODUCT SCHEMA ================== */
 const productSchema = new mongoose.Schema({
   name: String,
   price: Number,
   image: String,
-  stock: Number,
-  category: String,      // 🔥 NEW
-  subcategory: String    // 🔥 NEW
+  stock: Number
 });
 
 const Product = mongoose.model("Product", productSchema);
@@ -70,16 +79,25 @@ app.get("/", (req, res) => {
   res.send("Backend Running 🚀");
 });
 
-/* ================== ✅ GET PRODUCTS (FILTER SUPPORT) ================== */
+/* ================== ✅ IMAGE UPLOAD ================== */
+app.post("/upload", upload.single("image"), (req, res) => {
+  try {
+    const imageUrl = `https://zyro-backend-7jyw.onrender.com/uploads/${req.file.filename}`;
+    res.json({ success: true, imageUrl });
+  } catch (err) {
+    console.log("UPLOAD ERROR:", err);
+    res.status(500).json({ success: false });
+  }
+});
+
+/* ================== ✅ PRODUCTS ================== */
 app.get("/products", async (req, res) => {
   try {
-    const { category, subcategory } = req.query;
+    const data = await Product.find().sort({ _id: -1 });
 
-    let filter = {};
-    if (category) filter.category = category;
-    if (subcategory) filter.subcategory = subcategory;
-
-    const data = await Product.find(filter).sort({ _id: -1 });
+    if (data.length === 0) {
+      return res.json([]);
+    }
 
     res.json(data);
   } catch {
@@ -87,22 +105,16 @@ app.get("/products", async (req, res) => {
   }
 });
 
-/* ================== ✅ ADD PRODUCT (WITH IMAGE UPLOAD) ================== */
-app.post("/add-product", upload.single("image"), async (req, res) => {
+/* ================== ✅ ADD PRODUCT ================== */
+app.post("/add-product", async (req, res) => {
   try {
-    const { name, price, stock, category, subcategory } = req.body;
-
-    const imageUrl = req.file
-      ? `https://zyro-backend-7jyw.onrender.com/uploads/${req.file.filename}`
-      : "";
+    const { name, price, image, stock } = req.body;
 
     const newProduct = await Product.create({
       name,
       price,
-      stock,
-      image: imageUrl,
-      category,
-      subcategory
+      image,
+      stock
     });
 
     res.json({ success: true, product: newProduct });
@@ -116,9 +128,11 @@ app.post("/add-product", upload.single("image"), async (req, res) => {
 /* ================== ✅ UPDATE PRODUCT ================== */
 app.put("/update-product/:id", async (req, res) => {
   try {
+    const { name, price, image, stock } = req.body;
+
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { name, price, image, stock },
       { new: true }
     );
 
@@ -135,30 +149,8 @@ app.delete("/delete-product/:id", async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
     res.json({ success: true });
-  } catch (err) {
-    res.json({ success: false });
-  }
-});
-
-/* ================== ✅ ADMIN DASHBOARD (NEW) ================== */
-app.get("/admin-stats", async (req, res) => {
-  try {
-    const totalOrders = await Order.countDocuments();
-
-    const revenue = await Order.aggregate([
-      { $group: { _id: null, total: { $sum: "$amount" } } }
-    ]);
-
-    const totalProducts = await Product.countDocuments();
-
-    res.json({
-      totalOrders,
-      totalRevenue: revenue[0]?.total || 0,
-      totalProducts
-    });
-
   } catch {
-    res.json({ totalOrders: 0, totalRevenue: 0, totalProducts: 0 });
+    res.json({ success: false });
   }
 });
 
@@ -267,26 +259,6 @@ app.post("/verify-payment", async (req, res) => {
   } catch (err) {
     console.log("VERIFY ERROR:", err);
     res.status(500).json({ success: false });
-  }
-});
-
-/* ================== ✅ GET ALL ORDERS ================== */
-app.get("/orders", async (req, res) => {
-  try {
-    const orders = await Order.find().sort({ _id: -1 });
-    res.json(orders || []);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch orders" });
-  }
-});
-
-/* ================== ✅ GET USER ORDERS ================== */
-app.get("/my-orders/:userId", async (req, res) => {
-  try {
-    const orders = await Order.find({ userId: req.params.userId });
-    res.json(orders || []);
-  } catch (err) {
-    res.status(500).json({ error: "Failed" });
   }
 });
 
