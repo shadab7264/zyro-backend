@@ -4,11 +4,11 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 
-// ✅ ADD THESE
+// ✅ AUTH
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// 🔥 NEW (UPLOAD)
+// ✅ UPLOAD
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
@@ -28,10 +28,10 @@ if (!fs.existsSync(uploadPath)) {
 /* ================== ✅ STATIC FILE SERVE ================== */
 app.use("/uploads", express.static(uploadPath));
 
-/* ================== ✅ MULTER CONFIG ================== */
+/* ================== ✅ MULTER CONFIG (FIXED) ================== */
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "uploads/");
+    cb(null, uploadPath); // ✅ FIXED PATH
   },
   filename: function (req, file, cb) {
     const uniqueName = Date.now() + "-" + file.originalname;
@@ -46,14 +46,14 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected ✅"))
   .catch(err => console.log(err));
 
-/* ================== ✅ USER SCHEMA ================== */
+/* ================== ✅ USER ================== */
 const User = mongoose.model("User", {
   name: String,
   email: String,
   password: String,
 });
 
-/* ================== ✅ ORDER SCHEMA ================== */
+/* ================== ✅ ORDER ================== */
 const orderSchema = new mongoose.Schema({
   orderId: String,
   paymentId: String,
@@ -61,29 +61,32 @@ const orderSchema = new mongoose.Schema({
   status: String,
   userId: String,
 });
-
 const Order = mongoose.model("Order", orderSchema);
 
-/* ================== ✅ PRODUCT SCHEMA ================== */
+/* ================== ✅ PRODUCT ================== */
 const productSchema = new mongoose.Schema({
   name: String,
   price: Number,
   image: String,
   stock: Number
 });
-
 const Product = mongoose.model("Product", productSchema);
 
-/* ================== ✅ TEST ROUTE ================== */
+/* ================== ✅ TEST ================== */
 app.get("/", (req, res) => {
   res.send("Backend Running 🚀");
 });
 
-/* ================== ✅ IMAGE UPLOAD ================== */
+/* ================== ✅ IMAGE UPLOAD (FIXED) ================== */
 app.post("/upload", upload.single("image"), (req, res) => {
   try {
-    const imageUrl = `https://zyro-backend-7jyw.onrender.com/uploads/${req.file.filename}`;
-    res.json({ success: true, imageUrl });
+    const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+
+    res.json({
+      success: true,
+      image: imageUrl // ✅ FIXED KEY
+    });
+
   } catch (err) {
     console.log("UPLOAD ERROR:", err);
     res.status(500).json({ success: false });
@@ -94,11 +97,6 @@ app.post("/upload", upload.single("image"), (req, res) => {
 app.get("/products", async (req, res) => {
   try {
     const data = await Product.find().sort({ _id: -1 });
-
-    if (data.length === 0) {
-      return res.json([]);
-    }
-
     res.json(data);
   } catch {
     res.json([]);
