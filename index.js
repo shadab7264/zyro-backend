@@ -8,7 +8,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// ✅ CLOUDINARY
+// ✅ CLOUDINARY (FIXED)
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
@@ -20,23 +20,23 @@ app.use(express.json());
 
 /* ================== ✅ CLOUDINARY CONFIG ================== */
 cloudinary.config({
-  cloud_name: "dom7vhjen",
-  api_key: "727246957856766",
-  api_secret: "GG8SWwESk2FLy5y8uzh-4M53vOY"
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET
 });
 
-/* ================== ✅ MULTER CLOUD STORAGE ================== */
+/* ================== ✅ MULTER STORAGE ================== */
 const storage = new CloudinaryStorage({
-  cloudinary,
+  cloudinary: cloudinary,
   params: {
-    folder: "products",
-    allowed_formats: ["jpg", "png", "jpeg"]
-  }
+    folder: "arvelo_products",
+    allowed_formats: ["jpg", "png", "jpeg"],
+  },
 });
 
 const upload = multer({ storage });
 
-/* ================== ✅ MONGODB CONNECT ================== */
+/* ================== ✅ MONGODB ================== */
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected ✅"))
   .catch(err => console.log(err));
@@ -56,6 +56,7 @@ const orderSchema = new mongoose.Schema({
   status: String,
   userId: String,
 });
+
 const Order = mongoose.model("Order", orderSchema);
 
 /* ================== ✅ PRODUCT ================== */
@@ -67,6 +68,7 @@ const productSchema = new mongoose.Schema({
   category: String,
   subcategory: String
 });
+
 const Product = mongoose.model("Product", productSchema);
 
 /* ================== ✅ TEST ================== */
@@ -74,12 +76,12 @@ app.get("/", (req, res) => {
   res.send("Backend Running 🚀");
 });
 
-/* ================== ✅ IMAGE UPLOAD (CLOUDINARY) ================== */
+/* ================== ✅ UPLOAD IMAGE ================== */
 app.post("/upload", upload.single("image"), (req, res) => {
   try {
     res.json({
       success: true,
-      image: req.file.path // 🔥 CLOUDINARY URL
+      imageUrl: req.file.path // 🔥 CLOUDINARY URL
     });
   } catch (err) {
     console.log("UPLOAD ERROR:", err);
@@ -87,35 +89,28 @@ app.post("/upload", upload.single("image"), (req, res) => {
   }
 });
 
-/* ================== ✅ PRODUCTS ================== */
+/* ================== ✅ GET PRODUCTS ================== */
 app.get("/products", async (req, res) => {
   try {
-    const { category, subcategory } = req.query;
-
-    let filter = {};
-    if (category) filter.category = category;
-    if (subcategory) filter.subcategory = subcategory;
-
-    const data = await Product.find(filter).sort({ _id: -1 });
-
-    res.json(data);
+    const data = await Product.find().sort({ _id: -1 });
+    res.json(data || []);
   } catch {
     res.json([]);
   }
 });
 
-/* ================== ✅ ADD PRODUCT ================== */
-app.post("/add-product", async (req, res) => {
+/* ================== ✅ ADD PRODUCT (UPDATED) ================== */
+app.post("/add-product", upload.single("image"), async (req, res) => {
   try {
-    const { name, price, image, stock, category, subcategory } = req.body;
+    const { name, price, stock, category, subcategory } = req.body;
 
     const newProduct = await Product.create({
       name,
       price,
-      image,
       stock,
       category,
-      subcategory
+      subcategory,
+      image: req.file ? req.file.path : ""
     });
 
     res.json({ success: true, product: newProduct });
@@ -127,11 +122,25 @@ app.post("/add-product", async (req, res) => {
 });
 
 /* ================== ✅ UPDATE PRODUCT ================== */
-app.put("/update-product/:id", async (req, res) => {
+app.put("/update-product/:id", upload.single("image"), async (req, res) => {
   try {
+    const { name, price, stock, category, subcategory } = req.body;
+
+    const updateData = {
+      name,
+      price,
+      stock,
+      category,
+      subcategory
+    };
+
+    if (req.file) {
+      updateData.image = req.file.path;
+    }
+
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true }
     );
 
@@ -157,21 +166,23 @@ app.delete("/delete-product/:id", async (req, res) => {
 app.get("/admin-stats", async (req, res) => {
   try {
     const totalOrders = await Order.countDocuments();
-
-    const revenue = await Order.aggregate([
-      { $group: { _id: null, total: { $sum: "$amount" } } }
-    ]);
-
     const totalProducts = await Product.countDocuments();
+
+    const orders = await Order.find();
+    const totalRevenue = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
 
     res.json({
       totalOrders,
-      totalRevenue: revenue[0]?.total || 0,
-      totalProducts
+      totalProducts,
+      totalRevenue
     });
 
-  } catch {
-    res.json({ totalOrders: 0, totalRevenue: 0, totalProducts: 0 });
+  } catch (err) {
+    res.json({
+      totalOrders: 0,
+      totalProducts: 0,
+      totalRevenue: 0
+    });
   }
 });
 
@@ -204,13 +215,13 @@ app.post("/login", async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.json({ success: false, message: "User not found" });
+      return res.json({ success: false });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.json({ success: false, message: "Wrong password" });
+      return res.json({ success: false });
     }
 
     const token = jwt.sign(
@@ -222,7 +233,6 @@ app.post("/login", async (req, res) => {
     res.json({ success: true, token, user });
 
   } catch (err) {
-    console.log("LOGIN ERROR:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -266,7 +276,11 @@ app.post("/verify-payment", async (req, res) => {
       .update(body)
       .digest("hex");
 
-    res.json({ success: expectedSignature === razorpay_signature });
+    if (expectedSignature === razorpay_signature) {
+      return res.json({ success: true });
+    } else {
+      return res.json({ success: false });
+    }
 
   } catch {
     res.status(500).json({ success: false });
