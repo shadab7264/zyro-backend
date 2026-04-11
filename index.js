@@ -4,14 +4,31 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const crypto = require("crypto");
 
-// ✅ ADD THESE
+// ✅ EXISTING
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+
+// ✅ NEW (IMAGE UPLOAD)
+const multer = require("multer");
+const path = require("path");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+/* ================== ✅ IMAGE UPLOAD SETUP ================== */
+const storage = multer.diskStorage({
+  destination: "uploads/",
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage });
+
+// serve images
+app.use("/uploads", express.static("uploads"));
 
 /* ================== ✅ MONGODB CONNECT ================== */
 mongoose.connect(process.env.MONGO_URI)
@@ -36,12 +53,14 @@ const orderSchema = new mongoose.Schema({
 
 const Order = mongoose.model("Order", orderSchema);
 
-/* ================== ✅ PRODUCT SCHEMA (UPDATED) ================== */
+/* ================== ✅ PRODUCT SCHEMA (UPGRADED) ================== */
 const productSchema = new mongoose.Schema({
   name: String,
   price: Number,
   image: String,
-  stock: Number // 🔥 NEW (inventory)
+  stock: Number,
+  category: String,      // 🔥 NEW
+  subcategory: String    // 🔥 NEW
 });
 
 const Product = mongoose.model("Product", productSchema);
@@ -51,49 +70,39 @@ app.get("/", (req, res) => {
   res.send("Backend Running 🚀");
 });
 
-/* ================== ✅ PRODUCTS (OLD STATIC - KEPT) ================== */
-const products = [
-  {
-    id: 1,
-    name: "Black Hoodie",
-    price: 1999,
-    image: "https://images.unsplash.com/photo-1556821840-3a63f95609a7",
-    stock: 10
-  },
-  {
-    id: 2,
-    name: "White T-Shirt",
-    price: 999,
-    image: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab",
-    stock: 5
-  }
-];
-
-/* ================== ✅ GET PRODUCTS ================== */
+/* ================== ✅ GET PRODUCTS (FILTER SUPPORT) ================== */
 app.get("/products", async (req, res) => {
   try {
-    const data = await Product.find().sort({ _id: -1 });
+    const { category, subcategory } = req.query;
 
-    if (data.length === 0) {
-      return res.json(products);
-    }
+    let filter = {};
+    if (category) filter.category = category;
+    if (subcategory) filter.subcategory = subcategory;
+
+    const data = await Product.find(filter).sort({ _id: -1 });
 
     res.json(data);
   } catch {
-    res.json(products);
+    res.json([]);
   }
 });
 
-/* ================== ✅ ADD PRODUCT ================== */
-app.post("/add-product", async (req, res) => {
+/* ================== ✅ ADD PRODUCT (WITH IMAGE UPLOAD) ================== */
+app.post("/add-product", upload.single("image"), async (req, res) => {
   try {
-    const { name, price, image, stock } = req.body;
+    const { name, price, stock, category, subcategory } = req.body;
+
+    const imageUrl = req.file
+      ? `https://zyro-backend-7jyw.onrender.com/uploads/${req.file.filename}`
+      : "";
 
     const newProduct = await Product.create({
       name,
       price,
-      image,
-      stock
+      stock,
+      image: imageUrl,
+      category,
+      subcategory
     });
 
     res.json({ success: true, product: newProduct });
@@ -107,11 +116,9 @@ app.post("/add-product", async (req, res) => {
 /* ================== ✅ UPDATE PRODUCT ================== */
 app.put("/update-product/:id", async (req, res) => {
   try {
-    const { name, price, image, stock } = req.body;
-
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      { name, price, image, stock },
+      req.body,
       { new: true }
     );
 
@@ -128,8 +135,30 @@ app.delete("/delete-product/:id", async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
     res.json({ success: true });
-  } catch {
+  } catch (err) {
     res.json({ success: false });
+  }
+});
+
+/* ================== ✅ ADMIN DASHBOARD (NEW) ================== */
+app.get("/admin-stats", async (req, res) => {
+  try {
+    const totalOrders = await Order.countDocuments();
+
+    const revenue = await Order.aggregate([
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+
+    const totalProducts = await Product.countDocuments();
+
+    res.json({
+      totalOrders,
+      totalRevenue: revenue[0]?.total || 0,
+      totalProducts
+    });
+
+  } catch {
+    res.json({ totalOrders: 0, totalRevenue: 0, totalProducts: 0 });
   }
 });
 
